@@ -1,91 +1,162 @@
-<script>
-// ========================
-// EXTREME GPU+CPU DOUBLE STRESS
-// ========================
-
-// HEAVY Fragment Shader Renderer
-const vertexShaderSource = `#version 300 es
-in vec4 a_position;
-void main() {
-  gl_Position = a_position;
-}`;
-const fragmentShaderSource = `#version 300 es
-precision highp float;
-out vec4 outColor;
-uniform float uTime;
-void main() {
-  vec2 uv = gl_FragCoord.xy / vec2(1024.0);
-  float t = uTime;
+<!DOCTYPE html>  
+<html lang="en">  
+<head>  
+  <meta charset="UTF-8">  
+  <title>⚠️ EXTREME GPU/CPU STRESS TEST ⚠️</title>  
+  <style>  
+    body { margin: 0; overflow: hidden; background: #000; color: red; font-family: monospace; }  
+    canvas { width: 100vw; height: 100vh; display: block; }  
+    #stats { position: fixed; top: 10px; left: 10px; z-index: 100; }  
+  </style>  
+</head>  
+<body>  
+  <div id="stats">LOADING...</div>  
+  <canvas id="glcanvas"></canvas>  
   
-  // Heavy math to destroy GPU
-  for (int i = 0; i < 1000; i++) {
-    uv = fract(uv * 1.1 + sin(t + length(uv)));
-    t += 0.00001;
-  }
+  <!-- Extreme Compute Shader (WebGL2) -->  
+  <script id="compute-shader" type="x-shader/x-compute">  
+    #version 300 es  
+    layout(local_size_x = 16, local_size_y = 16) in;  
+    layout(rgba32f, binding = 0) writeonly uniform highp image2D outputTex;  
+    uniform float uTime;  
   
-  outColor = vec4(uv, fract(t), 1.0);
-}`;
-
-// Create shaders manually
-function createShader(gl, type, source) {
-  const shader = gl.createShader(type);
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  return shader;
-}
-function createProgram(gl, vsSource, fsSource) {
-  const program = gl.createProgram();
-  const vShader = createShader(gl, gl.VERTEX_SHADER, vsSource);
-  const fShader = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
-  gl.attachShader(program, vShader);
-  gl.attachShader(program, fShader);
-  gl.linkProgram(program);
-  return program;
-}
-
-// New heavy program
-const heavyProgram = createProgram(gl, vertexShaderSource, fragmentShaderSource);
-const positionBuffer = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-  -1, -1,
-   1, -1,
-  -1,  1,
-  -1,  1,
-   1, -1,
-   1,  1,
-]), gl.STATIC_DRAW);
-
-// Add time uniform
-const uTimeLoc = gl.getUniformLocation(heavyProgram, "uTime");
-
-// EXTREME Memory Leaks (simulate)
-function leakMemory() {
-  let arr = [];
-  setInterval(() => {
-    for (let i = 0; i < 10000; i++) {
-      arr.push(new Array(1000).fill(Math.random()));
-    }
-  }, 10);
-}
-
-// NEW render loop
-function heavyRender() {
-  gl.useProgram(heavyProgram);
-
-  const positionLocation = gl.getAttribLocation(heavyProgram, "a_position");
-  gl.enableVertexAttribArray(positionLocation);
-  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-  gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
-
-  gl.uniform1f(uTimeLoc, performance.now() * 0.001);
-
-  gl.drawArrays(gl.TRIANGLES, 0, 6);
+    void main() {  
+      ivec2 storePos = ivec2(gl_GlobalInvocationID.xy);  
+      vec2 uv = vec2(storePos) / 1024.0;  
+        
+      // Fractal chaos math  
+      vec3 p = vec3(uv * 10.0, uTime * 0.1);  
+      for (int i = 0; i < 20; i++) {  
+        p = abs(p) / dot(p, p) - 0.7;  
+      }  
+      imageStore(outputTex, storePos, vec4(p, 1.0));  
+    }  
+  </script>  
   
-  requestAnimationFrame(heavyRender);
-}
-
-// Start heavy stress functions
-leakMemory();
-heavyRender();
-</script>
+  <!-- Fragment Shader -->  
+  <script id="fragment-shader" type="x-shader/x-fragment">  
+    #version 300 es  
+    precision highp float;  
+    uniform sampler2D uTexture;  
+    uniform float uTime;  
+    out vec4 fragColor;  
+  
+    void main() {  
+      vec2 uv = gl_FragCoord.xy / vec2(1024.0);  
+      vec3 col = texture(uTexture, uv).rgb;  
+        
+      // Add more GPU load  
+      for (int i = 0; i < 5; i++) {  
+        col = fract(col * 1.5 + sin(uTime * 0.5 + length(col)));  
+      }  
+      fragColor = vec4(col, 1.0);  
+    }  
+  </script>  
+  
+  <script>  
+    // ========================  
+    // GPU STRESS (WebGL2)  
+    // ========================  
+    const canvas = document.getElementById('glcanvas');  
+    const gl = canvas.getContext('webgl2', { antialias: false, powerPreference: "high-performance" });  
+      
+    if (!gl) {  
+      alert("WebGL2 required! Use Chrome/Firefox.");  
+      throw new Error("No WebGL2");  
+    }  
+  
+    // Create extreme compute shader  
+    function createComputeShader() {  
+      const shaderSrc = document.getElementById('compute-shader').text;  
+      const shader = gl.createShader(gl.COMPUTE_SHADER);  
+      gl.shaderSource(shader, shaderSrc);  
+      gl.compileShader(shader);  
+      return shader;  
+    }  
+  
+    const computeProgram = gl.createProgram();  
+    gl.attachShader(computeProgram, createComputeShader());  
+    gl.linkProgram(computeProgram);  
+  
+    // Create output texture  
+    const outputTex = gl.createTexture();  
+    gl.bindTexture(gl.TEXTURE_2D, outputTex);  
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, 1024, 1024);  
+  
+    // ========================  
+    // CPU STRESS (WebAssembly)  
+    // ========================  
+    const wasmCode = new Uint8Array([  
+      0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x0e, 0x02, 0x60,  
+      0x01, 0x7f, 0x01, 0x7f, 0x60, 0x00, 0x00, 0x03, 0x03, 0x02, 0x00, 0x01,  
+      0x07, 0x0a, 0x01, 0x06, 0x5f, 0x73, 0x74, 0x61, 0x72, 0x74, 0x00, 0x01,  
+      0x0a, 0x20, 0x02, 0x02, 0x00, 0x0b, 0x10, 0x00, 0x41, 0x00, 0x0b, 0x0a,  
+      0x00, 0x41, 0x01, 0x41, 0x01, 0x6a, 0x0f, 0x0b  
+    ]);  
+  
+    const wasmModule = new WebAssembly.Module(wasmCode);  
+    const wasmInstance = new WebAssembly.Instance(wasmModule, {});  
+  
+    // Infinite CPU loop  
+    function cpuStress() {  
+      while (true) {  
+        wasmInstance.exports._start();  
+      }  
+    }  
+  
+    // ========================  
+    // WEB WORKERS (Multi-core)  
+    // ========================  
+    function spawnWorkers() {  
+      const cores = navigator.hardwareConcurrency || 4;  
+      for (let i = 0; i < cores * 2; i++) {  
+        const workerCode = `  
+          const wasmCode = new Uint8Array([${wasmCode.join(',')}]);  
+          WebAssembly.instantiate(wasmCode).then(wasm => {  
+            while (true) wasm.instance.exports._start();  
+          });  
+        `;  
+        const blob = new Blob([workerCode], { type: 'application/javascript' });  
+        new Worker(URL.createObjectURL(blob));  
+      }  
+    }  
+  
+    // ========================  
+    // MAIN LOOP  
+    // ========================  
+    function render() {  
+      // Resize canvas  
+      canvas.width = window.innerWidth;  
+      canvas.height = window.innerHeight;  
+      gl.viewport(0, 0, canvas.width, canvas.height);  
+  
+      // Run compute shader  
+      gl.useProgram(computeProgram);  
+      gl.bindImageTexture(0, outputTex, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F);  
+      gl.dispatchCompute(64, 64, 1);  
+      gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);  
+  
+      // Draw to screen  
+      gl.clear(gl.COLOR_BUFFER_BIT);  
+      // (Add rendering code here)  
+  
+      requestAnimationFrame(render);  
+    }  
+  
+    // ========================  
+    // START EVERYTHING  
+    // ========================  
+    spawnWorkers();  
+    setTimeout(cpuStress, 1000); // Delay to avoid blocking UI  
+    render();  
+  
+    // Anti-throttling  
+    document.addEventListener('mousemove', () => {});  
+    window.addEventListener('beforeunload', (e) => {  
+      e.preventDefault();  
+      e.returnValue = '';  
+    });  
+  </script>  
+</body>  
+</html>  
+  
