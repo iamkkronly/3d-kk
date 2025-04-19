@@ -2,239 +2,146 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>⚠️ EXTREME GPU/CPU STRESS TEST ⚠️</title>
+  <title>⚠️ ULTRA EXTREME GPU/CPU STRESS TEST ⚠️</title>
   <style>
-    body { margin: 0; overflow: hidden; background: #000; color: red; font-family: monospace; }
-    canvas { width: 100vw; height: 100vh; display: block; }
-    #stats { position: fixed; top: 10px; left: 10px; z-index: 100; }
+    body { margin: 0; overflow: hidden; background: black; }
+    canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
   </style>
 </head>
 <body>
-  <div id="stats">LOADING...</div>
-  <canvas id="glcanvas"></canvas>
-
-  <script id="compute-shader" type="x-shader/x-compute">
-    #version 300 es
-    layout(local_size_x = 16, local_size_y = 16) in;
-    layout(rgba32f, binding = 0) writeonly uniform highp image2D outputTex;
-    uniform float uTime;
-    uniform sampler2D cpuTex;
-
-    void main() {
-      ivec2 storePos = ivec2(gl_GlobalInvocationID.xy);
-      vec2 uv = vec2(storePos) / 2048.0;
-      
-      vec3 p = vec3(uv * 10.0, uTime * 0.1);
-      for (int i = 0; i < 30; i++) {
-        p = abs(p) / dot(p, p) - 0.7;
-        p += sin(p * 1.5 + uTime) * cos(p.zxy);
-      }
-      vec4 cpuData = texture(cpuTex, uv);
-      p += cpuData.rgb * 0.5;
-      imageStore(outputTex, storePos, vec4(p, 1.0));
-    }
-  </script>
-
-  <script id="compute-shader-2" type="x-shader/x-compute">
-    #version 300 es
-    layout(local_size_x = 16, local_size_y = 16) in;
-    layout(rgba32f, binding = 0) readonly uniform highp image2D inputTex;
-    layout(rgba32f, binding = 1) writeonly uniform highp image2D outputTex;
-    uniform float uTime;
-
-    void main() {
-      ivec2 storePos = ivec2(gl_GlobalInvocationID.xy);
-      vec4 data = imageLoad(inputTex, storePos);
-      vec3 p = data.rgb;
-      for (int i = 0; i < 30; i++) {
-        p = abs(p) / dot(p, p) - 0.5;
-        p = fract(p * 1.5 + sin(uTime * 0.2 + length(p)));
-      }
-      imageStore(outputTex, storePos, vec4(p, 1.0));
-    }
-  </script>
+  <canvas id="canvas1"></canvas>
+  <canvas id="canvas2"></canvas>
 
   <script id="fragment-shader" type="x-shader/x-fragment">
     #version 300 es
     precision highp float;
-    uniform sampler2D uTexture;
     uniform float uTime;
     out vec4 fragColor;
 
     void main() {
-      vec2 uv = gl_FragCoord.xy / vec2(2048.0);
-      vec3 col = texture(uTexture, uv).rgb;
-      
-      for (int i = 0; i < 10; i++) {
-        col = fract(col * 2.0 + sin(uTime * 0.5 + dot(col, vec3(0.3, 0.5, 0.7))));
-        col += cos(col.yzx) * 0.5;
+      vec2 uv = gl_FragCoord.xy / vec2(1024.0);
+
+      vec3 color = vec3(uv, 0.5);
+      for (int i = 0; i < 200; i++) {  // Heavy loop
+        color = fract(color * 1.5 + sin(uTime + length(color)));
       }
-      fragColor = vec4(col, 1.0);
+
+      fragColor = vec4(color, 1.0);
     }
   </script>
 
   <script>
-    const canvas = document.getElementById('glcanvas');
-    const gl = canvas.getContext('webgl2', { antialias: false, powerPreference: "high-performance" });
-    
-    if (!gl) {
-      alert("WebGL2 required! Use Chrome/Firefox.");
-      throw new Error("No WebGL2");
+    const canvases = [document.getElementById('canvas1'), document.getElementById('canvas2')];
+    const glContexts = canvases.map(c => c.getContext('webgl2', { antialias: false }));
+
+    if (glContexts.includes(null)) {
+      alert("WebGL2 needed!");
+      throw new Error("WebGL2 not supported!");
     }
 
-    // Compute Shader 1
-    function createComputeShader() {
-      const shaderSrc = document.getElementById('compute-shader').text;
-      const shader = gl.createShader(gl.COMPUTE_SHADER);
-      gl.shaderSource(shader, shaderSrc);
+    function createShader(gl, type, source) {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, source);
       gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        console.error(gl.getShaderInfoLog(shader));
+        gl.deleteShader(shader);
+        return null;
+      }
       return shader;
     }
-    const computeProgram = gl.createProgram();
-    gl.attachShader(computeProgram, createComputeShader());
-    gl.linkProgram(computeProgram);
 
-    // Compute Shader 2
-    function createSecondComputeShader() {
-      const shaderSrc = document.getElementById('compute-shader-2').text;
-      const shader = gl.createShader(gl.COMPUTE_SHADER);
-      gl.shaderSource(shader, shaderSrc);
-      gl.compileShader(shader);
-      return shader;
+    function createProgram(gl, fragShaderSource) {
+      const vsSource = `#version 300 es
+        in vec4 position;
+        void main() { gl_Position = position; }`;
+      const fsSource = fragShaderSource;
+
+      const vs = createShader(gl, gl.VERTEX_SHADER, vsSource);
+      const fs = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
+
+      const program = gl.createProgram();
+      gl.attachShader(program, vs);
+      gl.attachShader(program, fs);
+      gl.linkProgram(program);
+
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        console.error(gl.getProgramInfoLog(program));
+        return null;
+      }
+      return program;
     }
-    const computeProgram2 = gl.createProgram();
-    gl.attachShader(computeProgram2, createSecondComputeShader());
-    gl.linkProgram(computeProgram2);
 
-    // Textures
-    const outputTex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, outputTex);
-    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, 2048, 2048);
+    const fragShaderSource = document.getElementById('fragment-shader').textContent;
 
-    const outputTex2 = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, outputTex2);
-    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, 2048, 2048);
+    glContexts.forEach(gl => {
+      const program = createProgram(gl, fragShaderSource);
+      const positionBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        -1, -1,
+         1, -1,
+        -1,  1,
+        -1,  1,
+         1, -1,
+         1,  1,
+      ]), gl.STATIC_DRAW);
 
-    const cpuTex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, cpuTex);
-    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 2048, 2048);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      const positionLoc = gl.getAttribLocation(program, "position");
 
-    // Rendering Setup
-    const renderProgram = gl.createProgram();
-    const vs = gl.createShader(gl.VERTEX_SHADER);
-    gl.shaderSource(vs, `#version 300 es
-    in vec2 aPosition;
-    out vec2 vUv;
-    void main() {
-      vUv = aPosition * 0.5 + 0.5;
-      gl_Position = vec4(aPosition, 0.0, 1.0);
-    }`);
-    gl.compileShader(vs);
-    gl.attachShader(renderProgram, vs);
-    const fs = gl.createShader(gl.FRAGMENT_SHADER);
-    gl.shaderSource(fs, document.getElementById('fragment-shader').text);
-    gl.compileShader(fs);
-    gl.attachShader(renderProgram, fs);
-    gl.linkProgram(renderProgram);
+      function draw(time) {
+        gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+        gl.useProgram(program);
 
-    const positions = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
-    const vao = gl.createVertexArray();
-    gl.bindVertexArray(vao);
-    const vbo = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-    gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
-    const loc = gl.getAttribLocation(renderProgram, 'aPosition');
-    gl.enableVertexAttribArray(loc);
-    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+        const uTime = gl.getUniformLocation(program, "uTime");
+        gl.uniform1f(uTime, time * 0.001);
 
-    // WebAssembly
+        gl.enableVertexAttribArray(positionLoc);
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0);
+
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        requestAnimationFrame(draw);
+      }
+      requestAnimationFrame(draw);
+    });
+
+    // MULTICORE CPU ABUSE
     const wasmCode = new Uint8Array([
-      0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7c,
-      0x03, 0x02, 0x01, 0x00, 0x07, 0x07, 0x01, 0x06, 0x73, 0x74, 0x72, 0x65, 0x73, 0x73, 0x00,
-      0x00, 0x0a, 0x13, 0x01, 0x11, 0x00, 0x43, 0x00, 0x00, 0x00, 0x00, 0x21, 0x00, 0x03, 0x40,
-      0x20, 0x00, 0xa8, 0x20, 0x00, 0x93, 0x21, 0x00, 0x0c, 0x00, 0x0b, 0x20, 0x00, 0x0b
+      0x00,0x61,0x73,0x6d,0x01,0x00,0x00,0x00,0x01,0x0a,0x02,0x60,0x00,0x00,0x60,0x01,0x7f,0x00,
+      0x03,0x03,0x02,0x00,0x01,0x07,0x07,0x01,0x03,0x6c,0x6f,0x6f,0x00,0x00,0x0a,0x0b,0x02,0x04,
+      0x00,0x41,0x00,0x0b,0x05,0x00,0x41,0x01,0x0b
     ]);
     const wasmModule = new WebAssembly.Module(wasmCode);
-    const wasmInstance = new WebAssembly.Instance(wasmModule, {});
+    const wasmInstance = new WebAssembly.Instance(wasmModule);
 
-    function cpuStress() {
-      while (true) {
-        wasmInstance.exports.stress();
-      }
+    function infiniteCPU() {
+      while (true) wasmInstance.exports.loo();
     }
 
-    // Workers
-    function spawnWorkers() {
+    function stressAllCores() {
       const cores = navigator.hardwareConcurrency || 4;
-      for (let i = 0; i < cores * 4; i++) {
-        const workerCode = `
-          const largeArray = new Float64Array(100000000);
-          while (true) {
-            for (let j = 0; j < largeArray.length; j++) {
-              largeArray[j] = Math.sin(j * 0.01) * Math.cos(j * 0.02);
-            }
-          }
-        `;
-        const blob = new Blob([workerCode], { type: 'application/javascript' });
-        new Worker(URL.createObjectURL(blob));
+      for (let i = 0; i < cores * 2; i++) {
+        const worker = new Worker(URL.createObjectURL(new Blob([`
+          const wasmCode = new Uint8Array([${wasmCode.join(',')}]);
+          WebAssembly.instantiate(wasmCode).then(obj => {
+            while(true) obj.instance.exports.loo();
+          });
+        `], { type: 'application/javascript' })));
       }
     }
+    setTimeout(stressAllCores, 1000);
+    setTimeout(infiniteCPU, 3000);
 
-    // Render Loop
-    function render() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      gl.viewport(0, 0, canvas.width, canvas.height);
-
-      const texData = new Uint8Array(2048 * 2048 * 4);
-      for (let i = 0; i < texData.length; i += 4) {
-        const val = Math.sin(i * 0.01) * 255;
-        texData[i] = val;
-        texData[i+1] = val;
-        texData[i+2] = val;
-        texData[i+3] = 255;
+    // MEMORY FLOOD
+    setInterval(() => {
+      let hugeArray = new Float64Array(10**7);
+      for (let i = 0; i < hugeArray.length; i++) {
+        hugeArray[i] = Math.random();
       }
-      gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_2D, cpuTex);
-      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 2048, 2048, gl.RGBA, gl.UNSIGNED_BYTE, texData);
+    }, 500);
 
-      gl.useProgram(computeProgram);
-      gl.uniform1f(gl.getUniformLocation(computeProgram, 'uTime'), performance.now() / 1000);
-      gl.uniform1i(gl.getUniformLocation(computeProgram, 'cpuTex'), 1);
-      gl.bindImageTexture(0, outputTex, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
-      gl.dispatchCompute(128, 128, 1);
-      gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
-
-      gl.useProgram(computeProgram2);
-      gl.uniform1f(gl.getUniformLocation(computeProgram2, 'uTime'), performance.now() / 1000);
-      gl.bindImageTexture(0, outputTex, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
-      gl.bindImageTexture(1, outputTex2, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
-      gl.dispatchCompute(128, 128, 1);
-      gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
-
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.useProgram(renderProgram);
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, outputTex2);
-      gl.uniform1i(gl.getUniformLocation(renderProgram, 'uTexture'), 0);
-      gl.uniform1f(gl.getUniformLocation(renderProgram, 'uTime'), performance.now() / 1000);
-      gl.bindVertexArray(vao);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-      requestAnimationFrame(render);
-    }
-
-    spawnWorkers();
-    setTimeout(cpuStress, 1000);
-    render();
-
-    document.addEventListener('mousemove', () => {});
-    window.addEventListener('beforeunload', (e) => {
-      e.preventDefault();
-      e.returnValue = '';
-    });
   </script>
 </body>
 </html>
