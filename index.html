@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Ultimate GPU & CPU Killer</title>
+  <title>GPU & CPU Stress Test</title>
   <style>
     body { margin: 0; overflow: hidden; background: black; }
     canvas { width: 100vw; height: 100vh; display: block; }
@@ -46,11 +46,33 @@ void main(void) {
 <script src="https://cdn.jsdelivr.net/npm/gl-matrix@2.8.1/dist/gl-matrix-min.js"></script>
 
 <script>
-const canvas = document.getElementById('glcanvas');
-const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+// Create CPU workers
+function createCPUWorker() {
+  if (window.Worker) {
+    for (let i = 0; i < navigator.hardwareConcurrency; i++) {
+      const worker = new Worker(URL.createObjectURL(new Blob([`
+        self.onmessage = function() {
+          while(true) {
+            // Intense math calculations
+            for (let i = 0; i < 1000000; i++) {
+              Math.sqrt(Math.random() * Math.PI * Math.random());
+            }
+          }
+        };
+      `])));
+      worker.postMessage('start');
+    }
+  }
+}
 
+// Main WebGL stress test
+const canvas = document.getElementById('glcanvas');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
 if (!gl) {
-  alert('WebGL not supported bro! Samsung jaise khatara device ka issue!');
+  alert('WebGL not supported!');
 }
 
 function compileShader(id, type) {
@@ -82,7 +104,7 @@ function createProgram() {
 const program = createProgram();
 gl.useProgram(program);
 
-function generateCrazyPoints(radius, numPoints) {
+function generatePoints(radius, numPoints) {
   const vertices = [];
   const colors = [];
   for (let i = 0; i < numPoints; i++) {
@@ -100,16 +122,15 @@ function generateCrazyPoints(radius, numPoints) {
   return {vertices: new Float32Array(vertices), colors: new Float32Array(colors)};
 }
 
-// Extreme 5 Million points (5x upgrade)
-let sphere = generateCrazyPoints(1.0, 5000000);
+const sphere = generatePoints(1.0, 1000000);
 
 const vertexBuffer = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-gl.bufferData(gl.ARRAY_BUFFER, sphere.vertices, gl.DYNAMIC_DRAW);
+gl.bufferData(gl.ARRAY_BUFFER, sphere.vertices, gl.STATIC_DRAW);
 
 const colorBuffer = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-gl.bufferData(gl.ARRAY_BUFFER, sphere.colors, gl.DYNAMIC_DRAW);
+gl.bufferData(gl.ARRAY_BUFFER, sphere.colors, gl.STATIC_DRAW);
 
 const aPosition = gl.getAttribLocation(program, 'aPosition');
 const aColor = gl.getAttribLocation(program, 'aColor');
@@ -138,11 +159,6 @@ function draw() {
   gl.uniformMatrix4fv(uModelViewMatrix, false, modelViewMatrix);
   gl.uniform1f(uTime, time);
 
-  // Buffer recreate every frame (simulate memory leak lol)
-  const crazySphere = generateCrazyPoints(1.0, 5000);
-  gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-  gl.bufferSubData(gl.ARRAY_BUFFER, 0, crazySphere.vertices);
-
   gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
   gl.vertexAttribPointer(aPosition, 3, gl.FLOAT, false, 0, 0);
   gl.enableVertexAttribArray(aPosition);
@@ -159,7 +175,15 @@ function draw() {
 gl.clearColor(0, 0, 0, 1);
 gl.enable(gl.DEPTH_TEST);
 
+// Start CPU workers
+createCPUWorker();
+
+// Start GPU stress
 draw();
+
+// Add event listeners to prevent sleep
+document.addEventListener('mousemove', () => {});
+document.addEventListener('keydown', () => {});
 </script>
 </body>
 </html>
