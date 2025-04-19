@@ -2,188 +2,241 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>GPU & CPU Stress Test</title>
+  <title>🔥 ULTIMATE GPU & CPU STRESS TEST 🔥</title>
   <style>
-    body { margin: 0; overflow: hidden; background: black; }
+    body { margin: 0; overflow: hidden; background: #000; }
     canvas { width: 100vw; height: 100vh; display: block; }
+    #warning {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: red;
+      font-family: Arial, sans-serif;
+      font-weight: bold;
+      z-index: 1000;
+    }
   </style>
 </head>
 <body>
-<canvas id="glcanvas"></canvas>
+  <div id="warning">WARNING: This will max out your GPU & CPU. Close tab to stop.</div>
+  <canvas id="glcanvas"></canvas>
 
-<script id="vertex-shader" type="x-shader/x-vertex">
-attribute vec3 aPosition;
-attribute vec3 aColor;
-varying vec3 vColor;
-uniform mat4 uModelViewMatrix;
-uniform mat4 uProjectionMatrix;
-uniform float uTime;
+  <!-- Extreme GLSL Shaders -->
+  <script id="vertex-shader" type="x-shader/x-vertex">
+    precision highp float;
+    attribute vec3 aPosition;
+    attribute vec3 aColor;
+    varying vec3 vColor;
+    uniform mat4 uModelViewMatrix;
+    uniform mat4 uProjectionMatrix;
+    uniform float uTime;
+    uniform float uFractalIter;
 
-void main(void) {
-    float glitch = sin(uTime * 20.0 + aPosition.x * 1000.0) * cos(uTime * 20.0 + aPosition.y * 1000.0);
-    vec3 pos = aPosition + glitch * vec3(
-        sin(uTime * 100.0 + aPosition.x * 500.0),
-        cos(uTime * 100.0 + aPosition.y * 500.0),
-        sin(uTime * 100.0 + aPosition.z * 500.0)
-    );
-    gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(pos, 1.0);
-    gl_PointSize = 5.0 + 5.0 * abs(glitch);
-    vColor = aColor * abs(glitch);
-}
-</script>
-
-<script id="fragment-shader" type="x-shader/x-fragment">
-precision mediump float;
-varying vec3 vColor;
-
-void main(void) {
-    float dist = length(gl_PointCoord - vec2(0.5));
-    float alpha = 1.0 - smoothstep(0.0, 0.5, dist);
-    gl_FragColor = vec4(vColor, alpha);
-}
-</script>
-
-<script src="https://cdn.jsdelivr.net/npm/gl-matrix@2.8.1/dist/gl-matrix-min.js"></script>
-
-<script>
-// Create CPU workers
-function createCPUWorker() {
-  if (window.Worker) {
-    for (let i = 0; i < navigator.hardwareConcurrency; i++) {
-      const worker = new Worker(URL.createObjectURL(new Blob([`
-        self.onmessage = function() {
-          while(true) {
-            // Intense math calculations
-            for (let i = 0; i < 1000000; i++) {
-              Math.sqrt(Math.random() * Math.PI * Math.random());
-            }
-          }
-        };
-      `])));
-      worker.postMessage('start');
+    vec3 fractalDisplacement(vec3 pos, float time) {
+      vec3 p = pos * 10.0;
+      for(int i = 0; i < 10; i++) {
+        p = abs(p) / dot(p, p) - 0.5;
+        p = p * 1.5 + sin(time * 0.5 + length(p));
+      }
+      return p * 0.1;
     }
-  }
-}
 
-// Main WebGL stress test
-const canvas = document.getElementById('glcanvas');
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+    void main() {
+      vec3 pos = aPosition + fractalDisplacement(aPosition, uTime);
+      float glitch = sin(uTime * 50.0 + pos.x * 100.0) * cos(uTime * 30.0 + pos.y * 200.0);
+      pos += glitch * vec3(
+        sin(uTime * 100.0 + pos.x * 500.0),
+        cos(uTime * 100.0 + pos.y * 500.0),
+        sin(uTime * 100.0 + pos.z * 500.0)
+      );
+      gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(pos, 1.0);
+      gl_PointSize = 3.0 + 10.0 * abs(glitch);
+      vColor = aColor * (0.7 + 0.3 * sin(uTime + length(aPosition)));
+    }
+  </script>
 
-const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-if (!gl) {
-  alert('WebGL not supported!');
-}
+  <script id="fragment-shader" type="x-shader/x-fragment">
+    precision highp float;
+    varying vec3 vColor;
+    uniform float uTime;
 
-function compileShader(id, type) {
-  const shaderScript = document.getElementById(id);
-  const shader = gl.createShader(type);
-  gl.shaderSource(shader, shaderScript.text);
-  gl.compileShader(shader);
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    console.error('Shader compile error:', gl.getShaderInfoLog(shader));
-    return null;
-  }
-  return shader;
-}
+    void main() {
+      float dist = length(gl_PointCoord - vec2(0.5));
+      float alpha = smoothstep(0.5, 0.0, dist);
+      vec3 color = vColor * (0.8 + 0.2 * sin(uTime * 5.0 + dist * 10.0));
+      gl_FragColor = vec4(color, alpha);
+    }
+  </script>
 
-function createProgram() {
-  const vertexShader = compileShader('vertex-shader', gl.VERTEX_SHADER);
-  const fragmentShader = compileShader('fragment-shader', gl.FRAGMENT_SHADER);
-  const program = gl.createProgram();
-  gl.attachShader(program, vertexShader);
-  gl.attachShader(program, fragmentShader);
-  gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    console.error('Program link error:', gl.getProgramInfoLog(program));
-    return null;
-  }
-  return program;
-}
+  <script src="https://cdn.jsdelivr.net/npm/gl-matrix@2.8.1/dist/gl-matrix-min.js"></script>
+  
+  <script>
+    // ========== GPU STRESS ==========
+    const canvas = document.getElementById('glcanvas');
+    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    
+    if (!gl) {
+      alert("WebGL not supported! Try a modern browser like Chrome or Firefox.");
+      throw new Error("WebGL not supported");
+    }
 
-const program = createProgram();
-gl.useProgram(program);
+    // Compile extreme shaders
+    function compileShader(id, type) {
+      const shaderScript = document.getElementById(id);
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, shaderScript.text);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        console.error('Shader error:', gl.getShaderInfoLog(shader));
+        return null;
+      }
+      return shader;
+    }
 
-function generatePoints(radius, numPoints) {
-  const vertices = [];
-  const colors = [];
-  for (let i = 0; i < numPoints; i++) {
-    const u = Math.random();
-    const v = Math.random();
-    const theta = u * 2.0 * Math.PI;
-    const phi = Math.acos(2.0 * v - 1.0);
-    const r = radius * Math.pow(Math.random(), 0.5); 
-    const x = r * Math.sin(phi) * Math.cos(theta);
-    const y = r * Math.sin(phi) * Math.sin(theta);
-    const z = r * Math.cos(phi);
-    vertices.push(x, y, z);
-    colors.push(Math.random(), Math.random(), Math.random());
-  }
-  return {vertices: new Float32Array(vertices), colors: new Float32Array(colors)};
-}
+    function createProgram() {
+      const vertexShader = compileShader('vertex-shader', gl.VERTEX_SHADER);
+      const fragmentShader = compileShader('fragment-shader', gl.FRAGMENT_SHADER);
+      const program = gl.createProgram();
+      gl.attachShader(program, vertexShader);
+      gl.attachShader(program, fragmentShader);
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        console.error('Program error:', gl.getProgramInfoLog(program));
+        return null;
+      }
+      return program;
+    }
 
-const sphere = generatePoints(1.0, 1000000);
+    const program = createProgram();
+    gl.useProgram(program);
 
-const vertexBuffer = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-gl.bufferData(gl.ARRAY_BUFFER, sphere.vertices, gl.STATIC_DRAW);
+    // Generate 5 MILLION points (adjust if too slow)
+    function generatePoints(numPoints) {
+      const vertices = new Float32Array(numPoints * 3);
+      const colors = new Float32Array(numPoints * 3);
+      for (let i = 0; i < numPoints; i++) {
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        const r = Math.pow(Math.random(), 3.0);
+        vertices[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+        vertices[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+        vertices[i * 3 + 2] = r * Math.cos(phi);
+        colors[i * 3] = Math.random();
+        colors[i * 3 + 1] = Math.random();
+        colors[i * 3 + 2] = Math.random();
+      }
+      return { vertices, colors };
+    }
 
-const colorBuffer = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-gl.bufferData(gl.ARRAY_BUFFER, sphere.colors, gl.STATIC_DRAW);
+    const NUM_POINTS = 5000000; // 5 MILLION POINTS
+    let points = generatePoints(NUM_POINTS);
 
-const aPosition = gl.getAttribLocation(program, 'aPosition');
-const aColor = gl.getAttribLocation(program, 'aColor');
-const uModelViewMatrix = gl.getUniformLocation(program, 'uModelViewMatrix');
-const uProjectionMatrix = gl.getUniformLocation(program, 'uProjectionMatrix');
-const uTime = gl.getUniformLocation(program, 'uTime');
+    // Buffers (recreated every frame for extra stress)
+    let vertexBuffer, colorBuffer;
+    function updateBuffers() {
+      vertexBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, points.vertices, gl.DYNAMIC_DRAW);
 
-let startTime = Date.now();
+      colorBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, points.colors, gl.DYNAMIC_DRAW);
+    }
+    updateBuffers();
 
-function draw() {
-  const time = (Date.now() - startTime) * 0.001;
+    // Uniforms
+    const uModelViewMatrix = gl.getUniformLocation(program, 'uModelViewMatrix');
+    const uProjectionMatrix = gl.getUniformLocation(program, 'uProjectionMatrix');
+    const uTime = gl.getUniformLocation(program, 'uTime');
+    const uFractalIter = gl.getUniformLocation(program, 'uFractalIter');
 
-  gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    // Attributes
+    const aPosition = gl.getAttribLocation(program, 'aPosition');
+    const aColor = gl.getAttribLocation(program, 'aColor');
 
-  const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
-  const projectionMatrix = mat4.create();
-  mat4.perspective(projectionMatrix, Math.PI/4, aspect, 0.1, 100.0);
+    // ========== CPU STRESS (Web Workers) ==========
+    function startCPUKillers() {
+      if (window.Worker) {
+        const coreCount = navigator.hardwareConcurrency || 4;
+        for (let i = 0; i < coreCount * 2; i++) { // Overload CPU
+          const workerCode = `
+            let sum = 0;
+            while (true) {
+              for (let i = 0; i < 1000000; i++) {
+                sum += Math.sqrt(Math.random() * Math.PI * Math.random());
+              }
+              if (sum > 1e10) sum = 0;
+            }
+          `;
+          const blob = new Blob([workerCode], { type: 'application/javascript' });
+          const worker = new Worker(URL.createObjectURL(blob));
+          worker.postMessage('start');
+        }
+      }
+    }
 
-  const modelViewMatrix = mat4.create();
-  mat4.translate(modelViewMatrix, modelViewMatrix, [0.0, 0.0, -8.0]);
-  mat4.rotateY(modelViewMatrix, modelViewMatrix, time * 1.5);
-  mat4.rotateX(modelViewMatrix, modelViewMatrix, time * 2.0);
+    // ========== ANTI-THROTTLING TRICKS ==========
+    document.addEventListener('mousemove', () => {});
+    document.addEventListener('keydown', () => {});
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+    });
 
-  gl.uniformMatrix4fv(uProjectionMatrix, false, projectionMatrix);
-  gl.uniformMatrix4fv(uModelViewMatrix, false, modelViewMatrix);
-  gl.uniform1f(uTime, time);
+    // ========== MAIN RENDER LOOP ==========
+    let startTime = Date.now();
+    function render() {
+      const time = (Date.now() - startTime) * 0.001;
 
-  gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-  gl.vertexAttribPointer(aPosition, 3, gl.FLOAT, false, 0, 0);
-  gl.enableVertexAttribArray(aPosition);
+      // Resize canvas to full screen
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      gl.viewport(0, 0, canvas.width, canvas.height);
 
-  gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-  gl.vertexAttribPointer(aColor, 3, gl.FLOAT, false, 0, 0);
-  gl.enableVertexAttribArray(aColor);
+      // Update buffers (simulate memory leaks)
+      updateBuffers();
 
-  gl.drawArrays(gl.POINTS, 0, sphere.vertices.length/3);
+      // Set up matrices
+      const aspect = canvas.width / canvas.height;
+      const projectionMatrix = mat4.create();
+      mat4.perspective(projectionMatrix, Math.PI / 3, aspect, 0.1, 100.0);
 
-  requestAnimationFrame(draw);
-}
+      const modelViewMatrix = mat4.create();
+      mat4.translate(modelViewMatrix, modelViewMatrix, [0, 0, -5]);
+      mat4.rotateX(modelViewMatrix, modelViewMatrix, time * 0.7);
+      mat4.rotateY(modelViewMatrix, modelViewMatrix, time * 1.3);
+      mat4.rotateZ(modelViewMatrix, modelViewMatrix, time * 0.5);
 
-gl.clearColor(0, 0, 0, 1);
-gl.enable(gl.DEPTH_TEST);
+      // Set uniforms
+      gl.uniformMatrix4fv(uProjectionMatrix, false, projectionMatrix);
+      gl.uniformMatrix4fv(uModelViewMatrix, false, modelViewMatrix);
+      gl.uniform1f(uTime, time);
+      gl.uniform1f(uFractalIter, 10.0);
 
-// Start CPU workers
-createCPUWorker();
+      // Draw points
+      gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+      gl.vertexAttribPointer(aPosition, 3, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(aPosition);
 
-// Start GPU stress
-draw();
+      gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+      gl.vertexAttribPointer(aColor, 3, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(aColor);
 
-// Add event listeners to prevent sleep
-document.addEventListener('mousemove', () => {});
-document.addEventListener('keydown', () => {});
-</script>
+      gl.drawArrays(gl.POINTS, 0, NUM_POINTS);
+
+      requestAnimationFrame(render);
+    }
+
+    // ========== START EVERYTHING ==========
+    gl.clearColor(0, 0, 0, 1);
+    gl.enable(gl.DEPTH_TEST);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+
+    startCPUKillers();
+    render();
+  </script>
 </body>
 </html>
