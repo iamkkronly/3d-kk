@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Rounded Ball - WebGL</title>
+  <title>Ultimate Rounded Ball - WebGL</title>
   <style>
     body { margin: 0; overflow: hidden; background: black; }
     canvas { width: 100vw; height: 100vh; display: block; }
@@ -18,10 +18,16 @@ varying vec3 vColor;
 
 uniform mat4 uModelViewMatrix;
 uniform mat4 uProjectionMatrix;
+uniform float uTime;
 
 void main(void) {
-    gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(aPosition, 1.0);
-    gl_PointSize = 2.5;
+    vec3 pos = aPosition + 0.1 * vec3(
+        sin(uTime + aPosition.x * 10.0),
+        cos(uTime + aPosition.y * 10.0),
+        sin(uTime + aPosition.z * 10.0)
+    );
+    gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(pos, 1.0);
+    gl_PointSize = 2.5 + 2.0 * abs(sin(uTime + aPosition.y * 10.0));
     vColor = aColor;
 }
 </script>
@@ -31,7 +37,9 @@ precision mediump float;
 varying vec3 vColor;
 
 void main(void) {
-    gl_FragColor = vec4(vColor, 1.0);
+    float dist = length(gl_PointCoord - vec2(0.5));
+    float alpha = 1.0 - smoothstep(0.0, 0.5, dist);
+    gl_FragColor = vec4(vColor, alpha);
 }
 </script>
 
@@ -42,7 +50,7 @@ const canvas = document.getElementById('glcanvas');
 const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
 
 if (!gl) {
-  alert('WebGL not supported bro! Samsung ke phone jaise scene hai!');
+  alert('WebGL not supported bro! Samsung jaise khatara device ka issue!');
 }
 
 function compileShader(id, type) {
@@ -74,7 +82,6 @@ function createProgram() {
 const program = createProgram();
 gl.useProgram(program);
 
-// Generate random spherical points
 function generateSpherePoints(radius, numPoints) {
   const vertices = [];
   const colors = [];
@@ -92,7 +99,7 @@ function generateSpherePoints(radius, numPoints) {
   return {vertices: new Float32Array(vertices), colors: new Float32Array(colors)};
 }
 
-const sphere = generateSpherePoints(1.0, 5000);
+let sphere = generateSpherePoints(1.0, 6000);
 
 const vertexBuffer = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
@@ -106,8 +113,13 @@ const aPosition = gl.getAttribLocation(program, 'aPosition');
 const aColor = gl.getAttribLocation(program, 'aColor');
 const uModelViewMatrix = gl.getUniformLocation(program, 'uModelViewMatrix');
 const uProjectionMatrix = gl.getUniformLocation(program, 'uProjectionMatrix');
+const uTime = gl.getUniformLocation(program, 'uTime');
+
+let startTime = Date.now();
 
 function draw() {
+  const time = (Date.now() - startTime) * 0.001;
+
   gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -116,12 +128,13 @@ function draw() {
   mat4.perspective(projectionMatrix, Math.PI/4, aspect, 0.1, 100.0);
 
   const modelViewMatrix = mat4.create();
-  mat4.translate(modelViewMatrix, modelViewMatrix, [0.0, 0.0, -4.0]);
-  mat4.rotateY(modelViewMatrix, modelViewMatrix, performance.now() * 0.001);
-  mat4.rotateX(modelViewMatrix, modelViewMatrix, performance.now() * 0.0007);
+  mat4.translate(modelViewMatrix, modelViewMatrix, [0.0, 0.0, -5.0]);
+  mat4.rotateY(modelViewMatrix, modelViewMatrix, time * 0.5);
+  mat4.rotateX(modelViewMatrix, modelViewMatrix, time * 0.3);
 
   gl.uniformMatrix4fv(uProjectionMatrix, false, projectionMatrix);
   gl.uniformMatrix4fv(uModelViewMatrix, false, modelViewMatrix);
+  gl.uniform1f(uTime, time);
 
   gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
   gl.vertexAttribPointer(aPosition, 3, gl.FLOAT, false, 0, 0);
@@ -138,6 +151,17 @@ function draw() {
 
 gl.clearColor(0, 0, 0, 1);
 gl.enable(gl.DEPTH_TEST);
+
+canvas.addEventListener('click', () => {
+  // New colors on click - explosion vibe
+  let newColors = [];
+  for (let i = 0; i < sphere.vertices.length/3; i++) {
+    newColors.push(Math.random(), Math.random(), Math.random());
+  }
+  sphere.colors = new Float32Array(newColors);
+  gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, sphere.colors, gl.STATIC_DRAW);
+});
 
 draw();
 </script>
